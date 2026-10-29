@@ -5755,6 +5755,46 @@ class TestConditionLogic(unittest.TestCase):
             "inputs.parameter_values['pipelinechannel--flip-coin-Output'] == 'heads'",
         )
 
+    def test_if_with_escaped_string_literal(self):
+        """String literals in a condition are emitted as CEL literals."""
+
+        def condition_for(literal: str) -> str:
+
+            @dsl.pipeline
+            def literal_pipeline():
+                task = flip_coin()
+                with dsl.If(task.output == literal):
+                    print_and_return(text='Matched!')
+
+            return literal_pipeline.pipeline_spec.root.dag.tasks[
+                'condition-1'
+            ].trigger_policy.condition
+
+        self.assertEqual(
+            condition_for("it's"),
+            "inputs.parameter_values['pipelinechannel--flip-coin-Output'] == 'it\\'s'",
+        )
+        self.assertEqual(
+            condition_for('C:\\temp'),
+            "inputs.parameter_values['pipelinechannel--flip-coin-Output'] == 'C:\\\\temp'",
+        )
+
+    def test_if_with_control_characters_in_string_literal(self):
+        """Control characters in a literal are escaped, not emitted raw."""
+
+        @dsl.pipeline
+        def control_characters_pipeline():
+            task = flip_coin()
+            with dsl.If(task.output == 'two\nlines\ttabbed\x0b'):
+                print_and_return(text='Matched!')
+
+        self.assertEqual(
+            control_characters_pipeline.pipeline_spec.root.dag.tasks[
+                'condition-1'
+            ].trigger_policy.condition,
+            "inputs.parameter_values['pipelinechannel--flip-coin-Output'] == 'two\\nlines\\ttabbed\\u000b'",
+        )
+
     def test_if_else(self):
 
         @dsl.pipeline

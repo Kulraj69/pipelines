@@ -1231,6 +1231,39 @@ def _binary_operations_to_cel_conjunctive(
     return ' && '.join(operands)
 
 
+def _cel_string_literal(value: str) -> str:
+    """Returns a CEL literal for the given Python string.
+
+    The value is wrapped in single quotes and the characters CEL reads as
+    escapes are escaped, so a literal such as ``it's`` or ``C:\\temp`` keeps
+    its meaning when the backend parses the condition.
+
+    Args:
+        value: The string value to convert to a CEL literal.
+
+    Returns:
+        The value as a CEL single-quoted string literal.
+    """
+    escapes = {
+        '\\': '\\\\',
+        "'": "\\'",
+        '\n': '\\n',
+        '\r': '\\r',
+        '\t': '\\t',
+    }
+    escaped_chars = []
+    for char in value:
+        if char in escapes:
+            escaped_chars.append(escapes[char])
+        elif ord(char) < 0x20:
+            # Other control characters are not printable; CEL accepts the
+            # unicode escape.
+            escaped_chars.append(f'\\u{ord(char):04x}')
+        else:
+            escaped_chars.append(char)
+    return "'" + ''.join(escaped_chars) + "'"
+
+
 def _single_binary_operation_to_cel_condition(
     operation: pipeline_channel.ConditionOperation,
 ) -> str:
@@ -1323,7 +1356,7 @@ def _single_binary_operation_to_cel_condition(
             if parameter_type == pipeline_spec_pb2.ParameterType.NUMBER_INTEGER:
                 operand_value = f'int({operand_value})'
         elif isinstance(value_or_reference, str):
-            operand_value = f"'{value_or_reference}'"
+            operand_value = _cel_string_literal(value_or_reference)
             parameter_type = pipeline_spec_pb2.ParameterType.STRING
         elif isinstance(value_or_reference, bool):
             # Booleans need to be compared as 'true' or 'false' in CEL.
